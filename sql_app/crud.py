@@ -3,7 +3,7 @@
 # パラメータの型を宣言し、関数での型チェックと補完をする
 from sqlalchemy.orm import Session
 
-from . import models, schemas
+import models, schemas
 
 
 # def get_user(db: Session, user_id: int):
