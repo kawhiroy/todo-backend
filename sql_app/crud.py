@@ -25,10 +25,13 @@ def create_todo(db: Session, todo: schemas.TodoCreate):
     return db_todo
 
 
-# # Todoを更新(UPDATE)
-# def update_todo(db: Session, todo_id: int):
-#     todo = get_todo(db, todo_id)
-#     todo.content = todo
+# Todoを更新(UPDATE)
+def update_todo(db: Session, todo_id: int, new_todo: schemas.Todo):
+    todo = get_todo(db, todo_id)  #   idで指定したtodoを抽出
+    todo.content = new_todo.content  #   todo.contentを更新
+    todo.deadline = new_todo.deadline
+    todo.checked = new_todo.checked
+    db.commit()
 
 
 # Todoを削除(DELETE)

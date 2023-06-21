@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class TodoBase(BaseModel):
     content: str
     deadline: str
+    checked: bool
 
 
 class TodoCreate(TodoBase):

@@ -19,6 +19,7 @@ def get_db():
         db.close()
 
 
+# 許可するオリジン一覧
 origins = [
     "http://localhost:3000",
 ]
@@ -45,9 +46,11 @@ async def add_todo(todo: schemas.TodoCreate, db: Session = Depends(get_db)):
 
 
 # Todoの編集
-@app.put("/todos/{todo_id}")
-async def edit_todo(todo_id: int, db: Session = Depends(get_db)):
-    return crud.update_todo(db, todo_id)
+@app.put("/todos/{todo_id}", response_model=schemas.Todo)
+async def edit_todo(
+    todo_id: int, new_todo: schemas.TodoCreate, db: Session = Depends(get_db)
+):
+    return crud.update_todo(db, todo_id, new_todo)
 
 
 # Todoの削除
