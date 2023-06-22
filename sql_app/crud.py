@@ -1,6 +1,7 @@
 # DBのコマンドを投げるためのファイル
 
 # パラメータの型を宣言し、関数での型チェックと補完をする
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 import models, schemas
@@ -25,17 +26,20 @@ def create_todo(db: Session, todo: schemas.TodoCreate):
     return db_todo
 
 
-# Todoを更新(UPDATE)
-def update_todo(db: Session, todo_id: int, new_todo: schemas.Todo):
-    todo = get_todo(db, todo_id)  #   idで指定したtodoを抽出
-    todo.content = new_todo.content  #   todo.contentを更新
-    todo.deadline = new_todo.deadline
-    todo.checked = new_todo.checked
+def update_todo(db: Session, todo_id: int, new_todo: schemas.TodoUpdate):
+    db_todo = get_todo(db, todo_id)  # 存在しない場合にはget_todo関数内で例外が投げられる
+    if not db_todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    db_todo.content = new_todo.content
+    db_todo.deadline = new_todo.deadline
+    db_todo.checked = new_todo.checked
     db.commit()
+    db.refresh(db_todo)
+    return db_todo
 
 
 # Todoを削除(DELETE)
 def delete_todo(db: Session, todo_id: int):
-    todo = get_todo(db, todo_id)
-    db.delete(todo)
+    db_todo = get_todo(db, todo_id)
+    db.delete(db_todo)
     db.commit()

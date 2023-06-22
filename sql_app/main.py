@@ -1,5 +1,5 @@
 # URLと対応する処理をするためのファイル
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import crud, models, schemas
@@ -41,14 +41,14 @@ def read_todos(limit: int = 100, db: Session = Depends(get_db)):
 
 # Todoの追加
 @app.post("/todos/", response_model=schemas.Todo)
-async def add_todo(todo: schemas.TodoCreate, db: Session = Depends(get_db)):
+def add_todo(todo: schemas.TodoCreate, db: Session = Depends(get_db)):
     return crud.create_todo(db, todo)
 
 
 # Todoの編集
 @app.put("/todos/{todo_id}", response_model=schemas.Todo)
 async def edit_todo(
-    todo_id: int, new_todo: schemas.TodoCreate, db: Session = Depends(get_db)
+    todo_id: int, new_todo: schemas.TodoUpdate, db: Session = Depends(get_db)
 ):
     return crud.update_todo(db, todo_id, new_todo)
 

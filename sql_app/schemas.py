@@ -10,6 +10,12 @@ class TodoBase(BaseModel):
     checked: bool
 
 
+class TodoUpdate(BaseModel):
+    content: str
+    deadline: str
+    checked: bool
+
+
 class TodoCreate(TodoBase):
     pass
 
