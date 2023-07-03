@@ -1,11 +1,22 @@
 # DBのコマンドを投げるためのファイル
 
 # パラメータの型を宣言し、関数での型チェックと補完をする
-from fastapi import HTTPException
+from typing import Annotated
+from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
-
+from schemas import oauth2_scheme
 import models, schemas
 
+# ユーザ認証
+
+def fake_decode_token(token):
+    return schemas.User(
+        username=token + "fakedecoded", email="john@example.com", full_name="John Doe"
+    )
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    user = fake_decode_token(token)
+    return user
 
 # 単一のTodoを取得(READ)
 def get_todo(db: Session, todo_id: int):
