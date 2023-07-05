@@ -4,12 +4,12 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException,status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from database import SessionLocal, engine
-from schemas import oauth2_scheme
 import crud, models, schemas
 
 models.Base.metadata.create_all(bind=engine)
@@ -22,14 +22,30 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 fake_users_db = {
     "johndoe": {
         "username": "johndoe",
-        "full_name": "John Doe",
         "email": "johndoe@example.com",
         "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
         "disabled": False,
     },
 }
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
+
+class User(BaseModel):
+    username: str
+    disabled: bool | None = None
+
+class UserInDB(User):
+    hashed_password: str
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# OAuth2PasswordBearerクラスのインスタンス作成時に引数tokenUrlを渡す
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
@@ -54,17 +70,21 @@ def get_db():
     finally:
         db.close()
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
+# ハッシュを生成
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def get_user(db, username: str):
+# ハッシュを検証
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+# DBから該当のUser情報取得
+def get_user(db: Session, username: str):
     if username in db:
         user_dict = db[username]
-        return schemas.UserInDB(**user_dict)
-    
+        return UserInDB(**user_dict)
+
+# ユーザ認証
 def authenticate_user(fake_db, username: str, password: str):
     user = get_user(fake_db, username)
     if not user:
@@ -73,6 +93,7 @@ def authenticate_user(fake_db, username: str, password: str):
         return False
     return user
 
+# 新しいアクセストークンを生成
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
@@ -82,11 +103,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
-def fake_decode_token(token):
-    user = get_user(fake_users_db, token)
-    return user
-
+    
+# 受信したトークンを検証して現在のユーザーを返す
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -98,7 +116,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = schemas.TokenData(username=username)
+        token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
     user = get_user(fake_users_db, username=token_data.username)
@@ -106,13 +124,14 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         raise credentials_exception
     return user
 
-
 async def get_current_active_user(
-    current_user: Annotated[schemas.User, Depends(get_current_user)]
+    current_user: Annotated[User, Depends(get_current_user)]
 ):
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
 
 @app.post("/token")
 async def login_for_access_token(
@@ -131,11 +150,20 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-
-
 @app.get("/user/me")
-async def read_users_me(current_user: Annotated[schemas.User, Depends(crud.get_current_user)]):
+async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
     return current_user
+
+@app.get("/users/me/items/")
+async def read_own_items(
+    current_user: Annotated[User, Depends(get_current_active_user)]
+):
+    return [{"item_id": "Foo", "owner": current_user.username}]
+
+# ユーザーの登録
+@app.post("/users/")
+def register_user():
+    return crud.create_user()
 
 # Todoの一覧表示
 @app.get("/todos/", response_model=list[schemas.Todo])

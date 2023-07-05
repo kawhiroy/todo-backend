@@ -1,22 +1,17 @@
 # DBのコマンドを投げるためのファイル
 
 # パラメータの型を宣言し、関数での型チェックと補完をする
-from typing import Annotated
 from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
-from schemas import oauth2_scheme
 import models, schemas
 
 # ユーザ認証
 
-def fake_decode_token(token):
-    return schemas.User(
-        username=token + "fakedecoded", email="john@example.com", full_name="John Doe"
-    )
+# Userを作成
+def create_user(db: Session, user:schemas.UserCreate):
+    pass
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
-    user = fake_decode_token(token)
-    return user
+# Todoリスト
 
 # 単一のTodoを取得(READ)
 def get_todo(db: Session, todo_id: int):
@@ -36,7 +31,7 @@ def create_todo(db: Session, todo: schemas.TodoCreate):
     db.refresh(db_todo)
     return db_todo
 
-
+# Todoを更新(UPDATE)
 def update_todo(db: Session, todo_id: int, new_todo: schemas.TodoUpdate):
     db_todo = get_todo(db, todo_id)  # 存在しない場合にはget_todo関数内で例外が投げられる
     if not db_todo:
