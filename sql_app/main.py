@@ -161,9 +161,29 @@ async def read_own_items(
     return [{"item_id": "Foo", "owner": current_user.username}]
 
 # ユーザーの登録
-@app.post("/users/")
-def register_user():
-    return crud.create_user()
+@app.post("/users/", response_model=schemas.UserCreate)
+def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    hashed_password = get_password_hash(user.password)
+    db_user = models.User(username=user.username, hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+# ユーザーの取得
+@app.get("/users/", response_model=list[schemas.User])
+def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    users = crud.get_users(db, skip=skip, limit=limit)
+    return users
+
+
+
+@app.get("/users/{user_id}", response_model=schemas.User)
+def read_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = crud.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
 
 # Todoの一覧表示
 @app.get("/todos/", response_model=list[schemas.Todo])

@@ -8,11 +8,11 @@ from database import Base
 class User(Base):
     __tablename__ = "users"  # テーブルの名前"users"をSQLAlchemyに伝える
 
-    id = Column(Integer, primary_key=True, index=True)  # 主キー
+    user_id = Column(Integer, primary_key=True, index=True)  # 主キー
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
 
-    todos = relationship("Todo", back_populates="owner")
+    # todos = relationship("Todo", back_populates="user")
 
 
 # Todoテーブルの定義
@@ -23,6 +23,6 @@ class Todo(Base):
     content = Column(String, index=True)
     deadline = Column(String, index=True)
     checked = Column(Boolean, index=True, default=False)
+    # user_id = Column(Integer, ForeignKey('users.user_id'), default=0)
 
-    user_id = Column(Integer, ForeignKey('users.id'))
-    owner = relationship("User", back_populates="todos")
+    # user = relationship("User", back_populates="todos")
