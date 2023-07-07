@@ -1,8 +1,10 @@
 # DBに登録するテーブルやカラムを設定するためのファイル
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, MetaData
 from sqlalchemy.orm import relationship
 
 from database import Base
+
+metadata = MetaData()
 
 # Userテーブルの定義
 class User(Base):
@@ -12,7 +14,7 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
 
-    # todos = relationship("Todo", back_populates="user")
+    todos = relationship("Todo", back_populates="user")
 
 
 # Todoテーブルの定義
@@ -23,6 +25,6 @@ class Todo(Base):
     content = Column(String, index=True)
     deadline = Column(String, index=True)
     checked = Column(Boolean, index=True, default=False)
-    # user_id = Column(Integer, ForeignKey('users.user_id'), default=0)
+    user_id = Column(Integer, ForeignKey('users.user_id'), default=0)
 
-    # user = relationship("User", back_populates="todos")
+    user = relationship("User", back_populates="todos")
