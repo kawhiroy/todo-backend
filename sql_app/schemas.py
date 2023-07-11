@@ -14,9 +14,12 @@ class TodoUpdate(TodoBase):
 class TodoCreate(TodoBase):
     pass
 
+class TodoCreateResponce(TodoBase):
+    id: int
+
 class Todo(TodoBase):
     id: int
-    # user_id: int
+    user_id: int
 
     class Config:
         orm_mode = True
@@ -28,9 +31,16 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    hashed_password: str
+    password: str
 
 class User(UserBase):
+    user_id: int
+
+    class Config:
+        orm_mode = True
+
+class UserAll(UserBase):
+    hashed_password: str
     user_id: int
 
     class Config:

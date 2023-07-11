@@ -18,16 +18,6 @@ SECRET_KEY = "a576669c5ce71fc0c5b11c2f091259f3645a32b85916a0b3041b6ffc56e6aed7"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# あとでちゃんとしたDBとつなぐよ
-fake_users_db = {
-    "johndoe": {
-        "username": "johndoe",
-        "email": "johndoe@example.com",
-        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "disabled": False,
-    },
-}
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -39,10 +29,8 @@ class User(BaseModel):
     username: str
     disabled: bool | None = None
 
-class UserInDB(User):
-    hashed_password: str
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# class UserInDB(User):
+#     hashed_password: str
 
 # OAuth2PasswordBearerクラスのインスタンス作成時に引数tokenUrlを渡す
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -71,6 +59,7 @@ def get_db():
         db.close()
 
 # ハッシュを生成
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def get_password_hash(password):
     return pwd_context.hash(password)
 
@@ -79,18 +68,17 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 # DBから該当のUser情報取得
-def get_user(db: Session, username: str):
-    if username in db:
-        user_dict = db[username]
-        return UserInDB(**user_dict)
+def get_user_by_username(username: str, db: Session):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    return user
 
 # ユーザ認証
-def authenticate_user(fake_db, username: str, password: str):
-    user = get_user(fake_db, username)
+def authenticate_user(username: str, password: str, db: Session):
+    user = get_user_by_username(username, db)
     if not user:
-        return False
+        return None
     if not verify_password(password, user.hashed_password):
-        return False
+        return None
     return user
 
 # 新しいアクセストークンを生成
@@ -105,7 +93,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
     
 # 受信したトークンを検証して現在のユーザーを返す
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -119,25 +107,23 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(fake_users_db, username=token_data.username)
+    user = get_user_by_username(username=token_data.username, db=db)
     if user is None:
         raise credentials_exception
     return user
 
 async def get_current_active_user(
-    current_user: Annotated[User, Depends(get_current_user)]
+    current_user: Annotated[models.User, Depends(get_current_user)]
 ):
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-
-
 @app.post("/token")
 async def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: Session = Depends(get_db)
 ):
-    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    user = authenticate_user(form_data.username, form_data.password, db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -154,28 +140,22 @@ async def login_for_access_token(
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
     return current_user
 
-@app.get("/users/me/items/")
+@app.get("/user/me/items")
 async def read_own_items(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):
     return [{"item_id": "Foo", "owner": current_user.username}]
 
 # ユーザーの登録
-@app.post("/users/", response_model=schemas.UserCreate)
+@app.post("/users/", response_model=schemas.UserAll)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    hashed_password = get_password_hash(user.password)
-    db_user = models.User(username=user.username, hashed_password=hashed_password)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    hashed_password = get_password_hash(user.password)  
+    return crud.create_user(db, user, hashed_password)
 
 # ユーザーの取得
-@app.get("/users/", response_model=list[schemas.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    users = crud.get_users(db, skip=skip, limit=limit)
-    return users
-
+@app.get("/users/", response_model=list[schemas.UserAll])
+def read_users(limit: int = 100, db: Session = Depends(get_db)):
+    return crud.get_users(db, limit=limit)
 
 
 @app.get("/users/{user_id}", response_model=schemas.User)
@@ -187,25 +167,37 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
 
 # Todoの一覧表示
 @app.get("/todos/", response_model=list[schemas.Todo])
-def read_todos(limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_todos(db, limit=limit)
+def read_todos(
+    current_user: models.User = Depends(get_current_active_user),
+    limit: int = 100, 
+    db: Session = Depends(get_db)):
+    return crud.get_todos_by_user(db, user_id = current_user.user_id, limit=limit)
 
 
 # Todoの追加
 @app.post("/todos/", response_model=schemas.Todo)
-def add_todo(todo: schemas.TodoCreate, db: Session = Depends(get_db)):
-    return crud.create_todo(db, todo)
+def add_todo(
+    todo: schemas.TodoCreate,
+    current_user: models.User = Depends(get_current_active_user), 
+    db: Session = Depends(get_db)):
+    return crud.create_todo_by_user(db, todo, user_id = current_user.user_id)
 
 
 # Todoの編集
 @app.put("/todos/{todo_id}", response_model=schemas.Todo)
 async def edit_todo(
-    todo_id: int, new_todo: schemas.TodoUpdate, db: Session = Depends(get_db)
+    todo_id: int, 
+    new_todo: schemas.TodoUpdate, 
+    current_user: models.User = Depends(get_current_active_user), 
+    db: Session = Depends(get_db)
 ):
-    return crud.update_todo(db, todo_id, new_todo)
+    return crud.update_todo_by_user(db, todo_id, new_todo, user_id = current_user.user_id)
 
 
 # Todoの削除
 @app.delete("/todos/{todo_id}")
-async def remove_todo(todo_id: int, db: Session = Depends(get_db)):
-    return crud.delete_todo(db, todo_id)
+async def remove_todo(
+    todo_id: int, 
+    current_user: models.User = Depends(get_current_active_user), 
+    db: Session = Depends(get_db)):
+    return crud.delete_todo_by_user(db, todo_id, user_id = current_user.user_id)
